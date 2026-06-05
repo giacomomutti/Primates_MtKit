@@ -32,6 +32,21 @@ datasets:
     tree: data/references/mts_papio_rooted.nwk
 ```
 
+## Example samples file
+
+Each dataset `refs` file is a whitespace-delimited text file with three columns:
+
+- sample FASTQ path
+- sample name
+- comma-separated reference IDs
+
+Example `data/gorillas_samples.txt`:
+
+```text
+data/reads/IonXpress_035.fq.gz GGO2 Gorilla_gorilla_45,Pan_troglodytes
+data/reads/IonXpress_036.fq.gz GGO3 Gorilla_gorilla_45,Pan_troglodytes
+```
+
 ## Usage
 
 From the repository root:
