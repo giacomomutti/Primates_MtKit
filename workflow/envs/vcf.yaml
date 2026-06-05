@@ -1,0 +1,16 @@
+name: workflow-vcf
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - samtools
+  - bamtools
+  - bwa-mem2
+  - snp-sites
+  - vcftools
+  - blast
+  - seqtk
+  # - r-base
+  # - r-tidyverse
+  # - bioconductor-biostrings

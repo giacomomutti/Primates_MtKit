@@ -1,0 +1,2 @@
+data/reads/IonXpress_035.fq.gz	GGO2	Gorilla_gorilla_45,Pan_troglodytes
+data/reads/IonXpress_036.fq.gz	GGO3	Gorilla_gorilla_45,Pan_troglodytes

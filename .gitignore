@@ -1,0 +1,5 @@
+results/
+old/
+.snakemake/
+out.log
+data/reads/

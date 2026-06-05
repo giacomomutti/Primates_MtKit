@@ -1,0 +1,9 @@
+data/reads/IonXpress_037.fq.gz	PHA	GNP,16098,gelada_cnag_mt
+data/reads/IonXpress_012.fq.gz	TGEL1	GNP,16098,gelada_cnag_mt
+data/reads/IonXpress_013.fq.gz	TGEL2	GNP,16098,gelada_cnag_mt
+data/reads/IonXpress_014.fq.gz	TGEL3	GNP,16098,gelada_cnag_mt
+data/reads/IonXpress_016.fq.gz	PHA2	GNP,16098,gelada_cnag_mt
+data/reads/IonXpress_017.fq.gz	PHA3	GNP,16098,gelada_cnag_mt
+data/reads/IonXpress_019.fq.gz	TGEL4	GNP,16098,gelada_cnag_mt
+data/reads/IonXpress_020.fq.gz	PCYN	GNP,16098,gelada_cnag_mt
+data/reads/IonXpress_021.fq.gz	PURS	GNP,16098,gelada_cnag_mt

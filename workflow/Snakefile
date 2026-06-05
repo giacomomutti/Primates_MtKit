@@ -1,0 +1,300 @@
+configfile: "config.yaml"
+
+import os
+
+# Parse datasets and samples
+DATASETS = config.get("datasets", {})
+SAMPLES = {}  # sample_id -> (dataset, sample_name, read_file, refs_list)
+DATASET_REFS = {}  # dataset -> set of all references in that dataset
+DATASET_TO_REFS = {}  # dataset -> {ref_id -> dataset_name} (for msa lookup)
+
+for dataset_name, dataset_config in DATASETS.items():
+    refs_file = dataset_config["refs"]
+    DATASET_TO_REFS[dataset_name] = {}
+    DATASET_REFS[dataset_name] = set()
+    
+    # Read samples file
+    if os.path.exists(refs_file):
+        with open(refs_file) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                
+                parts = line.split()
+                if len(parts) >= 3:
+                    sample_file = parts[0]
+                    sample_name = parts[1]
+                    refs_str = parts[2]
+                    
+                    # Parse comma-separated references
+                    refs = [r.strip() for r in refs_str.split(",")]
+                    
+                    sample_id = f"{dataset_name}_{sample_name}"
+                    SAMPLES[sample_id] = (dataset_name, sample_name, sample_file, refs)
+                    
+                    # Track all references by dataset
+                    for ref in refs:
+                        DATASET_REFS[dataset_name].add(ref)
+                        DATASET_TO_REFS[dataset_name][ref] = dataset_name
+
+rule all:
+    input:
+        # Build all outputs for all datasets
+        [f"results/{dataset}/references/{ref}.fa.fai" 
+         for dataset in DATASETS.keys() 
+         for ref in DATASET_REFS.get(dataset, set())],
+        [f"results/{dataset}/references/{ref}.fa.pac" 
+         for dataset in DATASETS.keys() 
+         for ref in DATASET_REFS.get(dataset, set())],
+        [f"results/{dataset}/vcf/{ref}_sorted.vcf" 
+         for dataset in DATASETS.keys() 
+         for ref in DATASET_REFS.get(dataset, set())],
+        [f"results/{dataset}/bams/{sample_id.split('_', 1)[1]}_{ref}.bam"
+         for sample_id, (dataset, sample_name, reads, refs) in SAMPLES.items()
+         for ref in refs],
+        [f"results/{dataset}/bams/{ref}/{ref}_bams.list"
+         for dataset in DATASETS.keys()
+         for ref in DATASET_REFS.get(dataset, set())],
+        [f"results/{dataset}/pp/{ref}/pp_all.done"
+         for dataset in DATASETS.keys()
+         for ref in DATASET_REFS.get(dataset, set())]
+
+
+def get_msa_for_ref(ref):
+    """Find which dataset contains this reference and return the MSA path"""
+    for dataset_name, refs_in_dataset in DATASET_TO_REFS.items():
+        if ref in refs_in_dataset:
+            return DATASETS[dataset_name]["msa"]
+    return None
+
+
+def get_sample_read_file(dataset, sample_prefix):
+    """Get the read file path for a sample based on dataset and sample prefix."""
+    candidates = []
+    for sample_id, (ds, sample_name, read_file, refs) in SAMPLES.items():
+        if ds != dataset:
+            continue
+        if sample_prefix.startswith(sample_name + "_") or sample_prefix == sample_name:
+            candidates.append((sample_name, read_file))
+    if not candidates:
+        return None
+    # Prefer the longest matching sample name to avoid partial prefix collisions
+    best_sample = max(candidates, key=lambda x: len(x[0]))
+    return best_sample[1]
+
+
+rule extract_reference:
+    """Extract reference sequence from MSA and remove gaps"""
+    input:
+        msa=lambda wc: get_msa_for_ref(wc.ref)
+    conda:
+        "envs/vcf.yaml"
+    output:
+        fa="results/{dataset}/references/{ref}.fa"
+    shell:
+        """
+        # Extract sequence with header matching the reference name and remove gaps
+        samtools faidx {input.msa} {wildcards.ref} | seqkit seq -g > {output.fa}
+        """
+
+
+rule samtools_index:
+    """Create samtools faidx index for reference"""
+    input:
+        fa="results/{dataset}/references/{ref}.fa"
+    conda:
+        "envs/vcf.yaml"
+    output:
+        fai="results/{dataset}/references/{ref}.fa.fai"
+    shell:
+        """
+        samtools faidx {input.fa}
+        """
+
+
+rule bwa_index:
+    """Create bwa-mem2 index for reference"""
+    input:
+        fa="results/{dataset}/references/{ref}.fa"
+    conda:
+        "envs/vcf.yaml"
+    output:
+        pac="results/{dataset}/references/{ref}.fa.pac"
+    shell:
+        """
+        bwa-mem2 index {input.fa}
+        """
+
+rule build_ref_vcf:
+    conda:
+        "envs/vcf.yaml"
+    input:
+        msa=lambda wc: get_msa_for_ref(wc.ref)
+    output:
+        vcf=temp("results/{dataset}/vcf/{ref}_msa.vcf"),
+        sorted_vcf="results/{dataset}/vcf/{ref}_sorted.vcf"
+    shell:
+        """
+        outdir=$(dirname {output.vcf})
+        mkdir -p "$outdir"
+        
+        # Extract reference first, then all others in order, removing gaps
+        samtools faidx {input.msa} {wildcards.ref} $(grep ">" {input.msa} | cut -f1 -d' ' | sed 's/>//g' | grep -v "^{wildcards.ref}$") > "$outdir/{wildcards.ref}_reordered.fa"
+        
+        # Build VCF and run coordinate fixing
+        snp-sites -v "$outdir/{wildcards.ref}_reordered.fa" | vcftools --vcf - --min-alleles 2 --max-alleles 2 --recode --stdout > {output.vcf}
+        Rscript workflow/scripts/get_ref_coords.R "$outdir/{wildcards.ref}_reordered.fa" {wildcards.ref} {output.vcf} {output.sorted_vcf}
+        
+        rm "$outdir/{wildcards.ref}_reordered.fa"
+        """
+
+
+rule align_reads:
+    """Align reads to reference"""
+    conda:
+        "envs/vcf.yaml"
+    input:
+        reads=lambda wc: get_sample_read_file(wc.dataset, wc.sample),
+        ref="results/{dataset}/references/{ref}.fa",
+        ref_idx="results/{dataset}/references/{ref}.fa.pac"
+    output:
+        bam="results/{dataset}/bams/{sample,[^_]+}_{ref}.bam"
+    params: max_mismatches=config.get("nm", 5)
+    shell:
+        """
+        mkdir -p $(dirname {output.bam})
+        bwa-mem2 mem {input.ref} {input.reads} | samtools sort - | bamtools filter -tag "NM:<{params.max_mismatches}" -out {output.bam}
+        """
+
+rule make_bam_list:
+    conda:
+        "envs/vcf.yaml"
+    input:
+        lambda wc: [f"results/{wc.dataset}/bams/{sample_name}_{wc.ref}.bam" 
+                    for sample_id, (dataset, sample_name, reads, refs) in SAMPLES.items()
+                    if dataset == wc.dataset and wc.ref in refs]
+    output:
+        "results/{dataset}/bams/{ref}/{ref}_bams.list"
+    shell:
+        """
+        mkdir -p $(dirname {output})
+        for bam in {input}; do
+            realpath "$bam"
+        done > {output}
+        """
+
+
+rule run_phynder:
+    conda:
+        "envs/pathphynder.yaml"
+    input:
+        vcf="results/{dataset}/vcf/{ref}_sorted.vcf"
+    params:
+        ref_tree=lambda wc: DATASETS[wc.dataset]["tree"]
+    output:
+        "results/{dataset}/pp/{ref}/branches.snp"
+    shell:
+        """
+        vcf=$(realpath {input.vcf})
+        outdir=$(dirname {output})
+        mkdir -p "$outdir"
+        cd "$outdir"
+        phynder -B -o branches.snp {params.ref_tree} $vcf
+        """
+
+rule prepare_pp:
+    conda:
+        "envs/pathphynder.yaml"
+    input:
+        "results/{dataset}/pp/{ref}/branches.snp"
+    output:
+        "results/{dataset}/pp/{ref}/pp_prepare.done"
+    params:
+        ref_tree=lambda wc: DATASETS[wc.dataset]["tree"]
+    shell:
+        """
+        outdir=$(dirname {output})
+        cd "$outdir"
+        pathPhynder -s prepare -i {params.ref_tree} -p pp_out -f branches.snp
+        cd -
+        touch {output}
+        """
+
+rule run_pp_all:
+    conda:
+        "envs/pathphynder.yaml"
+    input:
+        prepare="results/{dataset}/pp/{ref}/pp_prepare.done",
+        bam_list="results/{dataset}/bams/{ref}/{ref}_bams.list",
+        ref="results/{dataset}/references/{ref}.fa"
+    output:
+        "results/{dataset}/pp/{ref}/pp_all.done"
+    params:
+        ref_tree=lambda wc: DATASETS[wc.dataset]["tree"],
+        tolerance=config.get("tolerance", 40),
+        mismatch_threshold=config.get("mismatch_threshold", 0.5)
+    shell:
+        """
+        outdir=$(dirname {output})
+        mkdir -p "$outdir"
+        bams=$(realpath {input.bam_list})
+        ref=$(realpath {input.ref})
+        cd "$outdir"
+        mkdir -p tree_data/pp_out
+        pathPhynder -s all -i {params.ref_tree} -p tree_data/pp_out -l "$bams" -m no-filter -r "$ref" -c {params.mismatch_threshold} -t {params.tolerance}
+        cd -
+        touch {output}
+        """
+
+
+# rule makeblastdb:
+#     conda:
+#         "envs/vcf.yaml"
+#     input:
+#         fasta="data/rotated_refs/{ref_id}_rotated_nogaps.fa"
+#     output:
+#         nhr="data/rotated_refs/{ref_id}_rotated_nogaps.fa.nhr",
+#         nin="data/rotated_refs/{ref_id}_rotated_nogaps.fa.nin",
+#         nsq="data/rotated_refs/{ref_id}_rotated_nogaps.fa.nsq"
+#     shell:
+#         """
+#         makeblastdb -in {input.fasta} -dbtype nucl -out {input.fasta}
+#         """
+
+# Original blast based filtering
+# rule filter_reads:
+#     conda:
+#         "envs/vcf.yaml"
+#     input:
+#         read=lambda wc: SAMPLE_TO_READ[wc.sample],
+#         human_db=f"{config['files']['rotated_refs']}/AP023485.1_rotated_nogaps.fa",
+#         human_db_idx=[
+#             f"{config['files']['rotated_refs']}/AP023485.1_rotated_nogaps.fa.nhr",
+#             f"{config['files']['rotated_refs']}/AP023485.1_rotated_nogaps.fa.nin",
+#             f"{config['files']['rotated_refs']}/AP023485.1_rotated_nogaps.fa.nsq"
+#         ],
+#         species_db=lambda wc: species_db(wc.sample),
+#         species_db_idx=lambda wc: expand(f"{config['files']['rotated_refs']}/{{ref_id}}_rotated_nogaps.fa.{{ext}}", ref_id=SAMPLE_TO_REF.get(wc.sample), ext=["nhr", "nin", "nsq"])
+#     output:
+#         "results/filtered_reads/{sample}_filtered.fastq"
+#     shell:
+#         """
+#         outdir=$(dirname {output})
+#         workdir=$(dirname "$outdir")/blast/{wildcards.sample}
+#         mkdir -p "$workdir"
+
+#         fa="$workdir/{wildcards.sample}_reads.fa"
+#         human_tsv="$workdir/{wildcards.sample}_reads_human.tsv"
+#         species_tsv="$workdir/{wildcards.sample}_reads_species.tsv"
+#         ids="$workdir/{wildcards.sample}_filtered.ids"
+
+#         samtools fasta {input.read} > "$fa"
+#         blastn -query "$fa" -db {input.human_db} -outfmt 6 > "$human_tsv"
+#         blastn -query "$fa" -db {input.species_db} -outfmt 6 > "$species_tsv"
+#         Rscript workflow/scripts/blast_reads_eda.R "$species_tsv" "$human_tsv" "$ids"
+#         seqtk subseq {input.read} "$ids" > {output}
+#         """
+
+
+

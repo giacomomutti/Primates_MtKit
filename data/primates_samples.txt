@@ -1,0 +1,8 @@
+data/reads/IonXpress_033.fq.gz	PTR12	NC_001643.1
+data/reads/IonXpress_034.fq.gz	PTR17	NC_001643.1
+data/reads/IonXpress_036.fq.gz	GG03	NC_001645.1
+data/reads/IonXpress_035.fq.gz	GG02	NC_001645.1
+data/reads/IonXpress_038.fq.gz	MFA16	NC_002764.1
+data/reads/IonXpress_039.fq.gz	LLA	NC_021951.1
+data/reads/IonXpress_037.fq.gz	PHA	NC_001992.1
+data/reads/IonXpress_040.fq.gz	GDE	NC_012761.1

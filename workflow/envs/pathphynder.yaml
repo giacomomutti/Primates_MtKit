@@ -1,0 +1,8 @@
+name: workflow-pathphynder
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - pathphynder
+  - samtools=1.20

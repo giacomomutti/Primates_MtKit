@@ -1,0 +1,31 @@
+# Workflow configuration for the Snakemake pipeline
+
+nm: 5
+tolerance: 40
+mismatch_threshold: 0.5
+
+datasets:
+  gorillas:
+    refs: /data/unipr_bkup/unipr_bkup/RIS/data/gorillas_samples.txt
+    msa: /data/unipr_bkup/unipr_bkup/RIS/data/references/mts_gorilla_aln.fa
+    tree: /data/unipr_bkup/unipr_bkup/RIS/data/references/mts_gorilla_rooted.nwk
+
+  papio:
+    refs: /data/unipr_bkup/unipr_bkup/RIS/data/papio_samples.txt
+    msa: /data/unipr_bkup/unipr_bkup/RIS/data/references/mts_papio_aln.fa
+    tree: /data/unipr_bkup/unipr_bkup/RIS/data/references/mts_papio_rooted.nwk
+
+  primates:
+    refs: /data/unipr_bkup/unipr_bkup/RIS/data/primates_samples.txt
+    msa: /data/unipr_bkup/unipr_bkup/RIS/data/references/mts_primates_aln.fa
+    tree: /data/unipr_bkup/unipr_bkup/RIS/data/references/mts_primates_rooted.nwk
+
+
+# files:
+#   references: data/ref.txt
+#   rotated_refs: data/rotated_refs
+
+# reference:
+#   msa: /data/unipr_bkup/unipr_bkup/RIS/data/references/mts_primates_aln.fa
+#   tree: /data/unipr_bkup/unipr_bkup/RIS/data/references/mts_primates_rooted.nwk
+
