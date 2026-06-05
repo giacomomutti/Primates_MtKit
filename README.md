@@ -46,6 +46,6 @@ Most of the software is handled by conda, you need to have [snakemake](https://s
 
 ## Example output
 
-For example, in the Gorilla dataset we manage to place the sample GGO2 in the gorilla diversity with Fritz and Guy, 
+For example, in the Gorilla dataset we manage to place the sample GGO2 in the gorilla diversity with Fritz and Guy, and the other sample in the other branch. It made sense at the time.
 
 ![results of the gorilla dataset](resources/gorillas.png)
