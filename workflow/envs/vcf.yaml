@@ -11,6 +11,7 @@ dependencies:
   - vcftools
   - blast
   - seqtk
-  # - r-base
-  # - r-tidyverse
-  # - bioconductor-biostrings
+  - seqkit
+  - r-base
+  - r-tidyverse
+  - bioconductor-biostrings

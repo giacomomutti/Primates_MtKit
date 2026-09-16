@@ -14,6 +14,7 @@ This repository contains a Snakemake-based pipeline to process ~low-quality mtDN
 
 It is important to note that datasets should not go too deep, for example, the `primates` dataset is kind of doomed to fail, whereas the gorilla one is more useful. Therefore, the reference MSA and tree should cover a bit the diversity of the species you may be interested in.
 
+
 ![Scheme of the processing pipeline](resources/dag.png)
 
 
@@ -46,6 +47,8 @@ Example `data/gorillas_samples.txt`:
 data/reads/IonXpress_035.fq.gz GGO2 Gorilla_gorilla_45,Pan_troglodytes
 data/reads/IonXpress_036.fq.gz GGO3 Gorilla_gorilla_45,Pan_troglodytes
 ```
+
+The name of the reference is important and the pipeline may file if there is any weird combination of underscores etc. You can test with a dry-run with `snakemake -n` and check if they are properly parsed or change the names accordingly.
 
 ## Usage
 
